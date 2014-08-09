@@ -3,8 +3,6 @@
 
 #include "log_event.h"
 
-int slave_worker_exec_job(Slave_worker *worker, Relay_log_info *rli);
-
 /**
   @class Log_event_wrapper
   */
@@ -120,13 +118,6 @@ public:
     auto ret= is_finalized;
     mysql_mutex_unlock(&mutex);
     return ret;
-  }
-
-  int execute(Slave_worker *w, THD *thd, Relay_log_info *rli)
-  {
-    // the raw event was already added to the worker's jobs queue, so it's safe
-    // to call @slave_worker_exec_job function directly
-    return slave_worker_exec_job(w, rli);
   }
 
   void put_next(std::shared_ptr<Log_event_wrapper> &ev);

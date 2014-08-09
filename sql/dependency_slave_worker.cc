@@ -8,6 +8,7 @@
 bool append_item_to_jobs(slave_job_item *job_item,
                          Slave_worker *w,
                          Relay_log_info *rli);
+int slave_worker_exec_single_job(Slave_worker *worker, Relay_log_info *rli);
 
 
 std::shared_ptr<Log_event_wrapper>
@@ -132,12 +133,13 @@ Dependency_slave_worker::execute_event(std::shared_ptr<Log_event_wrapper> &ev)
     // NOTE: this is done so that @pop_jobs_item() can extract this event
     // although this is redundant it makes integration with existing code much
     // easier
-    Slave_job_item item= { ev->raw_event() };
+    Slave_job_item item= { ev->raw_event(), c_rli->get_event_relay_log_number(),
+                              c_rli->get_event_start_pos() };
     if (append_item_to_jobs(&item, this, c_rli)) return 1;
     ev->is_appended_to_queue= true;
   }
   DBUG_ASSERT(ev->is_appended_to_queue);
-  return ev->execute(this, this->info_thd, c_rli) == 0 ? 0 : -1;
+  return slave_worker_exec_single_job(this, c_rli) == 0 ? 0 : -1;
 }
 
 void

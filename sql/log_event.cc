@@ -2900,10 +2900,10 @@ Slave_worker *Log_event::get_slave_worker(Relay_log_info *rli)
 
       if (is_s_event || is_gtid_event(this))
       {
-        Log_event *ptr_curr_ev= this;
+        Slave_job_item job_item= {this, rli->get_event_relay_log_number(),
+                                  rli->get_event_start_pos()};
         // B-event is appended to the Deferred Array associated with GCAP
-        insert_dynamic(&rli->curr_group_da,
-                       (uchar*) &ptr_curr_ev);
+        insert_dynamic(&rli->curr_group_da, &job_item);
 
         DBUG_ASSERT(rli->curr_group_da.elements == 1);
 
@@ -2920,12 +2920,23 @@ Slave_worker *Log_event::get_slave_worker(Relay_log_info *rli)
 
         return ret_worker;
       }
+      else if (get_type_code() != QUERY_EVENT)
+      {
+        Slave_job_item job_item= {this, rli->get_event_relay_log_number(),
+                                  rli->get_event_relay_log_pos()};
+
+        // B-event is appended to the Deferred Array associated with GCAP
+        insert_dynamic(&rli->curr_group_da, &job_item);
+        return NULL;
+      }
     }
     else
     {
-      Log_event *ptr_curr_ev= this;
+      Slave_job_item job_item= {this, rli->get_event_relay_log_number(),
+                                rli->get_event_relay_log_pos()};
+
       // B-event is appended to the Deferred Array associated with GCAP
-      insert_dynamic(&rli->curr_group_da, (uchar*) &ptr_curr_ev);
+      insert_dynamic(&rli->curr_group_da, &job_item);
       rli->curr_group_seen_begin= true;
       rli->mts_end_group_sets_max_dbs= true;
       DBUG_ASSERT(rli->curr_group_da.elements == 2);
@@ -15065,7 +15076,8 @@ int Rows_query_log_event::do_apply_event(Relay_log_info const *rli)
   DBUG_ASSERT(rli->rows_query_ev == NULL);
 
   const_cast<Relay_log_info*>(rli)->rows_query_ev= this;
-
+  /* Tell worker not to free the event */
+  worker= NULL;
   DBUG_RETURN(0);
 }
 #endif

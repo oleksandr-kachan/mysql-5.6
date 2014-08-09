@@ -2,6 +2,7 @@
 #include "rpl_rli_pdb.h"
 #include "log_event_wrapper.h"
 
+
 void Log_event_wrapper::put_next(std::shared_ptr<Log_event_wrapper> &ev)
 {
   mysql_mutex_lock(&mutex);

@@ -7326,3 +7326,6 @@ ER_SLAVE_WORKER_STOPPED_PREVIOUS_THD_ERROR
 #
 #  End of 5.6 error messages.
 #
+
+ER_DONT_SUPPORT_SLAVE_PRESERVE_COMMIT_ORDER
+  eng "slave_preserve_commit_order is not supported %s."

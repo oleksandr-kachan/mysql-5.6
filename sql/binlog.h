@@ -743,6 +743,7 @@ public:
   int find_log_pos(LOG_INFO* linfo, const char* log_name,
                    bool need_lock_index);
   int find_next_log(LOG_INFO* linfo, bool need_lock_index);
+  int find_next_relay_log(char log_name[FN_REFLEN+1]);
   int get_current_log(LOG_INFO* linfo, bool need_lock_log= true);
   /*
     This is called to find out the most recent binlog file

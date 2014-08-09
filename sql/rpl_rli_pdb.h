@@ -126,6 +126,8 @@ void wait_for_dep_workers_to_finish(Relay_log_info *rli,
 typedef struct slave_job_item
 {
   void *data;
+  uint relay_number;
+  my_off_t relay_pos;
 } Slave_job_item;
 
 /**
@@ -393,6 +395,8 @@ public:
   // symmetric to rli->mts_end_group_sets_max_dbs
   bool end_group_sets_max_dbs;
 
+  uint start_relay_number;
+  my_off_t start_relay_pos;
   volatile bool relay_log_change_notified; // Coord sets and resets, W can read
   volatile bool checkpoint_notified; // Coord sets and resets, W can read
   volatile bool master_log_change_notified; // Coord sets and resets, W can read
@@ -507,6 +511,10 @@ public:
     return current_db;
   }
 
+  int slave_worker_exec_event(Log_event *ev);
+  bool retry_transaction(uint start_relay_number, my_off_t start_relay_pos,
+                         uint end_relay_number, my_off_t end_relay_pos);
+
 protected:
 
   virtual void do_report(loglevel level, int err_code,
@@ -520,6 +528,10 @@ private:
   bool write_info(Rpl_info_handler *to);
   Slave_worker& operator=(const Slave_worker& info);
   Slave_worker(const Slave_worker& info);
+  bool worker_sleep(ulong seconds);
+  bool read_and_apply_events(uint start_relay_number, my_off_t start_relay_pos,
+                             uint end_relay_number, my_off_t end_relay_pos);
+  void assign_partition_db(Log_event *ev);
 };
 
 void * head_queue(Slave_jobs_queue *jobs, Slave_job_item *ret);

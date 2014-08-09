@@ -101,7 +101,7 @@ Relay_log_info::Relay_log_info(bool is_slave_recovery
    ends_group(false),
    save_temporary_tables(0),
    cur_log_old_open_count(0), error_on_rli_init_info(false),
-   group_relay_log_pos(0), event_relay_log_pos(0),
+   group_relay_log_pos(0),  event_relay_log_number(0), event_relay_log_pos(0), event_start_pos(0),
    group_master_log_pos(0),
    gtid_set(global_sid_map, global_sid_lock),
    log_space_total(0), ignore_log_space_limit(0),
@@ -675,10 +675,8 @@ int Relay_log_info::init_relay_log_pos(const char* log,
     goto err;
   }
 
-  strmake(group_relay_log_name, linfo.log_file_name,
-          sizeof(group_relay_log_name) - 1);
-  strmake(event_relay_log_name, linfo.log_file_name,
-          sizeof(event_relay_log_name) - 1);
+  set_group_relay_log_name(linfo.log_file_name);
+  set_event_relay_log_name(linfo.log_file_name);
 
   if (relay_log.is_active(linfo.log_file_name))
   {
@@ -1353,10 +1351,8 @@ int Relay_log_info::purge_relay_logs(THD *thd, bool just_reset,
     goto err;
   }
   /* Save name of used relay log file */
-  strmake(group_relay_log_name, relay_log.get_log_fname(),
-          sizeof(group_relay_log_name)-1);
-  strmake(event_relay_log_name, relay_log.get_log_fname(),
-          sizeof(event_relay_log_name)-1);
+  set_group_relay_log_name(relay_log.get_log_fname());
+  set_event_relay_log_name(relay_log.get_log_fname());
   group_relay_log_pos= event_relay_log_pos= BIN_LOG_HEADER_SIZE;
   if (count_relay_log_space())
   {
@@ -2629,6 +2625,29 @@ void Relay_log_info::adapt_to_master_version(Format_description_log_event *fdle)
       s_features[i].upgrade(thd);
     }
   }
+}
+
+void Relay_log_info::relay_log_number_to_name(uint number,
+                                              char name[FN_REFLEN+1])
+{
+  char *str= NULL;
+
+  /* str points to closing null relay log basename */
+  str= strmake(name, relay_log_basename, FN_REFLEN+1);
+  *str++= '.';
+  sprintf(str, "%06u", number);
+}
+
+uint Relay_log_info::relay_log_name_to_number(const char *name)
+{
+  return static_cast<uint>(atoi(fn_ext(name)+1));
+}
+
+bool is_mts_db_partitioned(Relay_log_info * rli)
+{
+  return true;
+  //(rli->current_mts_submode->get_type() ==
+  //  MTS_PARALLEL_TYPE_DB_NAME);
 }
 
 /**
