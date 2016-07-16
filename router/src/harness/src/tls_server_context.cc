@@ -40,7 +40,8 @@
 
 #include "openssl_version.h"
 
-#if OPENSSL_VERSION_NUMBER < ROUTER_OPENSSL_VERSION(1, 1, 0)
+#if OPENSSL_VERSION_NUMBER < ROUTER_OPENSSL_VERSION(1, 1, 0) || \
+    defined(OPENSSL_IS_BORINGSSL)
 #define RSA_bits(rsa) BN_num_bits(rsa->n)
 #define DH_bits(dh) BN_num_bits(dh->p)
 #endif
@@ -169,7 +170,8 @@ stdx::expected<void, std::error_code> TlsServerContext::init_tmp_dh(
     }
 
   } else {
-#if OPENSSL_VERSION_NUMBER >= ROUTER_OPENSSL_VERSION(1, 1, 0)
+#if OPENSSL_VERSION_NUMBER >= ROUTER_OPENSSL_VERSION(1, 1, 0) && \
+    !defined(OPENSSL_IS_BORINGSSL)
     dh2048.reset(DH_get_2048_256());
 #else
     /*
