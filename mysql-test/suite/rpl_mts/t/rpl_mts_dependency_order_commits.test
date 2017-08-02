@@ -39,6 +39,7 @@ connection slave1;
 # Wait for 2nd trx above to block on commit order
 let $wait_condition= SELECT COUNT(*) = 1 FROM INFORMATION_SCHEMA.PROCESSLIST
 WHERE STATE LIKE "%Waiting for preceding transaction to commit%";
+let $wait_timeout= 120;
 source include/wait_condition.inc;
 
 # Wait for 3rd trx to go through
