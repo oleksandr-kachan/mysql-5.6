@@ -3288,6 +3288,11 @@ void Log_event::add_to_dag(Relay_log_info *rli)
   group_ready= ev->is_end_event &&
                rli->dag.get_parents(ev->get_begin_event()).empty();
 
+  // DAG not empty anymore!
+  mysql_mutex_lock(&rli->dag_empty_mutex);
+  rli->dag_empty= false;
+  mysql_mutex_unlock(&rli->dag_empty_mutex);
+
   rli->dag_unlock();
 
   if (group_ready)
@@ -3298,11 +3303,6 @@ void Log_event::add_to_dag(Relay_log_info *rli)
     mysql_cond_broadcast(&rli->dag_group_ready_cond);
     mysql_mutex_unlock(&rli->dag_group_ready_mutex);
   }
-
-  // DAG not empty anymore!
-  mysql_mutex_lock(&rli->dag_empty_mutex);
-  rli->dag_empty= false;
-  mysql_mutex_unlock(&rli->dag_empty_mutex);
 
   DBUG_VOID_RETURN;
 }
