@@ -1138,6 +1138,7 @@ public:
   bool dag_empty= true;
 
   Log_event_wrapper *prev_event= NULL;
+  Table_map_log_event *last_table_map_event= NULL;
   Log_event_wrapper *current_begin_event= NULL;
   bool dag_sync_group= false;
 
@@ -1170,6 +1171,7 @@ public:
     }
 
     prev_event= NULL;
+    last_table_map_event= NULL;
     current_begin_event= NULL;
 
     DBUG_ASSERT(dag.is_empty());
