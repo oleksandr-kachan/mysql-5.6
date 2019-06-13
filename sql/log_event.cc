@@ -3293,7 +3293,7 @@ void Log_event::schedule_dep(Relay_log_info *rli)
     }
 
     // admission control in dep queue
-    if (unlikely(rli->dep_queue.size() >= opt_mts_dependency_size))
+    if (unlikely(rli->dep_queue.size() >= rli->mts_dependency_size))
     {
       rli->dep_full= true;
     }
@@ -3709,7 +3709,7 @@ int Log_event::apply_event(Relay_log_info *rli)
               */
               (rli->curr_group_seen_begin && rli->curr_group_seen_gtid
                && ends_group()) ||
-              rli->last_assigned_worker || opt_mts_dependency_replication ||
+              rli->last_assigned_worker || rli->mts_dependency_replication ||
               /*
                 Begin_load_query can be logged w/o db info and within
                 Begin/Commit. That's a pattern forcing sequential
@@ -3722,7 +3722,7 @@ int Log_event::apply_event(Relay_log_info *rli)
   worker= NULL;
   rli->mts_group_status= Relay_log_info::MTS_IN_GROUP;
 
-  if (!opt_mts_dependency_replication)
+  if (!rli->mts_dependency_replication)
     worker= (Relay_log_info*)
       (rli->last_assigned_worker= get_slave_worker(rli));
 
@@ -5023,7 +5023,7 @@ void Query_log_event::print(FILE* file, PRINT_EVENT_INFO* print_event_info)
 */
 void Query_log_event::attach_temp_tables_worker(THD *thd)
 {
-  if (opt_mts_dependency_replication || !is_mts_worker(thd) ||
+  if (thd->rli_slave->mts_dependency_replication || !is_mts_worker(thd) ||
       (ends_group() || starts_group()))
     return;
 
@@ -5050,7 +5050,7 @@ void Query_log_event::attach_temp_tables_worker(THD *thd)
 */
 void Query_log_event::detach_temp_tables_worker(THD *thd)
 {
-  if (opt_mts_dependency_replication || !is_mts_worker(thd))
+  if (thd->rli_slave->mts_dependency_replication || !is_mts_worker(thd))
     return;
 
   int parts= ((mts_accessed_dbs == OVER_MAX_DBS_IN_EVENT_MTS) ?
@@ -5505,7 +5505,7 @@ int Query_log_event::do_apply_event(Relay_log_info const *rli,
           {
             option_name= "rpl_skip_tx_api";
           }
-          else if (opt_mts_dependency_replication)
+          else if (rli->mts_dependency_replication)
           {
             option_name= "mts_dependency_replication";
           }
@@ -11973,10 +11973,10 @@ bool Rows_log_event::get_keys(Relay_log_info *rli,
   void *memory= NULL;
   bool success= false;
 
-  DBUG_ASSERT(opt_mts_dependency_replication);
+  DBUG_ASSERT(rli->mts_dependency_replication);
 
   // case: table level dependency, just add the table key and return
-  if (opt_mts_dependency_replication == DEP_RPL_TABLE)
+  if (rli->mts_dependency_replication == DEP_RPL_TABLE)
   {
     Dependency_key table_key;
     table_key.table_id= m_table_name;
@@ -11984,7 +11984,7 @@ bool Rows_log_event::get_keys(Relay_log_info *rli,
     DBUG_RETURN(true);
   }
 
-  DBUG_ASSERT(opt_mts_dependency_replication == DEP_RPL_STATEMENT);
+  DBUG_ASSERT(rli->mts_dependency_replication == DEP_RPL_STATEMENT);
   DBUG_ASSERT(thd->open_tables == NULL);
   DBUG_ASSERT(m_key_info == NULL);
   DBUG_ASSERT(m_table == NULL);
@@ -12094,7 +12094,7 @@ void Rows_log_event::prepare_dep(Relay_log_info *rli,
   if (unlikely(
         !get_keys(rli, ev, m_keylist) ||
         m_keylist.size() + rli->keys_accessed_by_group.size() >
-                opt_mts_dependency_max_keys))
+                rli->mts_dependency_max_keys))
   {
     rli->dep_sync_group= true;
     m_keylist.clear();

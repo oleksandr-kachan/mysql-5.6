@@ -9487,7 +9487,7 @@ static int show_slave_running(THD *thd, SHOW_VAR *var, char *buff)
 
 static int show_slave_dependency_in_queue(THD *thd, SHOW_VAR *var, char *buff)
 {
-  if (opt_mts_dependency_replication && active_mi && active_mi->rli)
+  if (active_mi && active_mi->rli && active_mi->rli->mts_dependency_replication)
   {
     var->type= SHOW_LONGLONG;
     var->value= buff;
@@ -9502,7 +9502,7 @@ static int show_slave_dependency_in_queue(THD *thd, SHOW_VAR *var, char *buff)
 
 static int show_slave_dependency_in_flight(THD *thd, SHOW_VAR *var, char *buff)
 {
-  if (opt_mts_dependency_replication && active_mi && active_mi->rli)
+  if (active_mi && active_mi->rli && active_mi->rli->mts_dependency_replication)
   {
     var->type= SHOW_LONGLONG;
     var->value= buff;
@@ -9518,7 +9518,7 @@ static int show_slave_dependency_in_flight(THD *thd, SHOW_VAR *var, char *buff)
 static
 int show_slave_dependency_begin_waits(THD *thd, SHOW_VAR *var, char *buff)
 {
-  if (opt_mts_dependency_replication && active_mi && active_mi->rli)
+  if (active_mi && active_mi->rli && active_mi->rli->mts_dependency_replication)
   {
     var->type= SHOW_LONGLONG;
     var->value= buff;
@@ -9531,7 +9531,7 @@ int show_slave_dependency_begin_waits(THD *thd, SHOW_VAR *var, char *buff)
 
 static int show_slave_dependency_next_waits(THD *thd, SHOW_VAR *var, char *buff)
 {
-  if (opt_mts_dependency_replication && active_mi && active_mi->rli)
+  if (active_mi && active_mi->rli && active_mi->rli->mts_dependency_replication)
   {
     var->type= SHOW_LONGLONG;
     var->value= buff;
