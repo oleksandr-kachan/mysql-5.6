@@ -263,11 +263,16 @@ void Writeset_trx_dependency_tracker::get_dependency(THD *thd,
         if (hst->second > last_parent && hst->second < sequence_number)
           last_parent = hst->second;
 
+        DBUG_PRINT("info",
+             ("found hash=%llu sequence_number=%llu old_sequence_number=%llu", *it, sequence_number, hst->second));
         hst->second = sequence_number;
+
       } else {
         if (!exceeds_capacity)
           m_writeset_history.insert(
               std::pair<uint64, int64>(*it, sequence_number));
+        DBUG_PRINT("info",
+             ("add hash=%llu sequence_number=%llu", *it, sequence_number));
       }
     }
 

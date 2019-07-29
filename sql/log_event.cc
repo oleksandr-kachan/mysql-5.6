@@ -2860,8 +2860,10 @@ Slave_worker *Log_event::get_slave_worker(Relay_log_info *rli) {
   }
 
   DBUG_ASSERT(ret_worker);
+
   // T-event: Commit, Xid, a DDL query or dml query of B-less group.4
 
+#if 0
   /*
     Preparing event physical coordinates info for Worker before any
     event got scheduled so when Worker error-stopped at the first
@@ -2893,6 +2895,7 @@ Slave_worker *Log_event::get_slave_worker(Relay_log_info *rli) {
     ptr_group->new_fd_event = rli->get_rli_description_event();
     ret_worker->fd_change_notified = true;
   }
+#endif
 
   if (ends_group() ||
       (!rli->curr_group_seen_begin &&
@@ -2934,6 +2937,7 @@ Slave_worker *Log_event::get_slave_worker(Relay_log_info *rli) {
       };);
     }
 
+#if 0
     /*
       The following two blocks are executed if the worker has not been
       notified about new relay-log or a new checkpoints.
@@ -2974,6 +2978,7 @@ Slave_worker *Log_event::get_slave_worker(Relay_log_info *rli) {
       ret_worker->bitmap_shifted = 0;
       ret_worker->checkpoint_notified = true;
     }
+#endif
     ptr_group->checkpoint_seqno = rli->checkpoint_seqno;
     ptr_group->ts = common_header->when.tv_sec +
                     (time_t)exec_time;  // Seconds_behind_master related
@@ -2994,6 +2999,97 @@ Slave_worker *Log_event::get_slave_worker(Relay_log_info *rli) {
   }
 
   DBUG_RETURN(ret_worker);
+}
+
+
+void Log_event::prepare_worker(bool ends_group, ulong gaq_index, Slave_worker *ret_worker, Relay_log_info *rli) {
+  Slave_job_group *ptr_group = NULL;
+  Slave_committed_queue *gaq = rli->gaq;
+  DBUG_ENTER("Log_event::prepare_worker");
+
+  DBUG_ASSERT(ret_worker != NULL);
+
+  // T-event: Commit, Xid, a DDL query or dml query of B-less group.4
+
+  /*
+    Preparing event physical coordinates info for Worker before any
+    event got scheduled so when Worker error-stopped at the first
+    event it would be aware of where exactly in the event stream.
+  */
+  if (!ret_worker->master_log_change_notified) {
+    if (!ptr_group)
+      ptr_group = gaq->get_job_group(gaq_index);
+    ptr_group->group_master_log_name = my_strdup(
+        key_memory_log_event, rli->get_group_master_log_name(), MYF(MY_WME));
+    ret_worker->master_log_change_notified = true;
+
+    DBUG_ASSERT(!ptr_group->notified);
+#ifndef DBUG_OFF
+    ptr_group->notified = true;
+#endif
+  }
+
+  /* Notify the worker about new FD */
+  if (!ret_worker->fd_change_notified) {
+    if (!ptr_group)
+      ptr_group = gaq->get_job_group(gaq_index);
+    /*
+      Increment the usage counter on behalf of Worker.
+      This avoids inadvertent FD deletion in a race case where Coordinator
+      would install a next new FD before Worker has noticed the previous one.
+    */
+    ++rli->get_rli_description_event()->atomic_usage_counter;
+    ptr_group->new_fd_event = rli->get_rli_description_event();
+    ret_worker->fd_change_notified = true;
+  }
+
+  if (ends_group) {
+    if (!ptr_group)
+      ptr_group = gaq->get_job_group(gaq_index);
+
+    /*
+      The following two blocks are executed if the worker has not been
+      notified about new relay-log or a new checkpoints.
+      Relay-log string is freed by Coordinator, Worker deallocates
+      strings in the checkpoint block.
+      However if the worker exits earlier reclaiming for both happens anyway at
+      GAQ delete.
+    */
+    if (!ret_worker->relay_log_change_notified) {
+      /*
+        Prior this event, C rotated the relay log to drop each
+        Worker's notified flag. Now group terminating event initiates
+        the new relay-log (where the current event is from) name
+        delivery to Worker that will receive it in commit_positions().
+      */
+      DBUG_ASSERT(ptr_group->group_relay_log_name == NULL);
+
+      ptr_group->group_relay_log_name = (char *)my_malloc(
+          key_memory_log_event, strlen(rli->get_group_relay_log_name()) + 1,
+          MYF(MY_WME));
+      strcpy(ptr_group->group_relay_log_name, rli->get_event_relay_log_name());
+
+      DBUG_ASSERT(ptr_group->group_relay_log_name != NULL);
+
+      ret_worker->relay_log_change_notified = true;
+    }
+
+    if (!ret_worker->checkpoint_notified) {
+      if (!ptr_group)
+        ptr_group = gaq->get_job_group(gaq_index);
+      ptr_group->checkpoint_log_name = my_strdup(
+          key_memory_log_event, rli->get_group_master_log_name(), MYF(MY_WME));
+      ptr_group->checkpoint_log_pos = rli->get_group_master_log_pos();
+      ptr_group->checkpoint_relay_log_name = my_strdup(
+          key_memory_log_event, rli->get_group_relay_log_name(), MYF(MY_WME));
+      ptr_group->checkpoint_relay_log_pos = rli->get_group_relay_log_pos();
+      ptr_group->shifted = ret_worker->bitmap_shifted;
+      ret_worker->bitmap_shifted = 0;
+      ret_worker->checkpoint_notified = true;
+    }
+  }
+
+  DBUG_VOID_RETURN;
 }
 
 int Log_event::apply_gtid_event(Relay_log_info *rli) {
@@ -3236,6 +3332,8 @@ int Log_event::apply_event(Relay_log_info *rli) {
 
   worker =
       (Relay_log_info *)(rli->last_assigned_worker = get_slave_worker(rli));
+  if (rli->last_assigned_worker && rli->channel_mts_submode != MTS_PARALLEL_TYPE_DEPENDENCY)
+      prepare_worker(rli->mts_group_status == Relay_log_info::MTS_END_GROUP, rli->gaq->assigned_group_index, rli->last_assigned_worker, rli);
 
 #ifndef DBUG_OFF
   if (rli->last_assigned_worker)
@@ -8441,6 +8539,8 @@ int Rows_log_event::do_apply_row(Relay_log_info const *rli) {
   }
   m_table->in_use = old_thd;
 
+  DBUG_PRINT("info",
+             ("row_query=%s", thd->row_query.c_str()));
   DBUG_RETURN(error);
 }
 

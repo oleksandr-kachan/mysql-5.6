@@ -114,6 +114,7 @@ Relay_log_info::Relay_log_info(bool is_slave_recovery
 #endif
                ,
                param_id, param_channel),
+      jobs_queue_last_index(0),
       replicate_same_server_id(::replicate_same_server_id),
       relay_log(&sync_relaylog_period),
       is_relay_log_recovery(is_slave_recovery),
@@ -200,6 +201,8 @@ Relay_log_info::Relay_log_info(bool is_slave_recovery
   commit_timestamps_status = COMMIT_TS_UNKNOWN;
 
   if (!rli_fake) {
+    mysql_mutex_init(key_mutex_jobs_queue, &jobs_queue_lock,
+                     MY_MUTEX_INIT_FAST);
     mysql_mutex_init(key_relay_log_info_log_space_lock, &log_space_lock,
                      MY_MUTEX_INIT_FAST);
     mysql_cond_init(key_relay_log_info_log_space_cond, &log_space_cond);
@@ -275,6 +278,7 @@ Relay_log_info::~Relay_log_info() {
       workers_copy_pfs.clear();
     }
 
+    mysql_mutex_destroy(&jobs_queue_lock);
     mysql_mutex_destroy(&log_space_lock);
     mysql_cond_destroy(&log_space_cond);
     mysql_mutex_destroy(&pending_jobs_lock);

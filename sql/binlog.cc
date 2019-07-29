@@ -7728,6 +7728,8 @@ TC_LOG::enum_result MYSQL_BIN_LOG::commit(THD *thd, bool all) {
   DBUG_ENTER("MYSQL_BIN_LOG::commit");
   DBUG_PRINT("info",
              ("query='%s'", thd == current_thd ? thd->query().str : NULL));
+  DBUG_PRINT("info",
+             ("row_query='%s'", thd == current_thd ? thd->row_query.c_str() : NULL));
   binlog_cache_mngr *cache_mngr = thd_get_cache_mngr(thd);
   Transaction_ctx *trn_ctx = thd->get_transaction();
   my_xid xid = trn_ctx->xid_state()->get_xid()->get_my_xid();

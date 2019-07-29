@@ -355,9 +355,19 @@ int Slave_worker::init_worker(Relay_log_info *rli, ulong i) {
   overrun_level = jobs.size - underrun_level;
 
   /* create mts submode for each of the the workers. */
-  current_mts_submode = (rli->channel_mts_submode == MTS_PARALLEL_TYPE_DB_NAME)
-                            ? (Mts_submode *)new Mts_submode_database()
-                            : (Mts_submode *)new Mts_submode_logical_clock();
+  switch (rli->channel_mts_submode) {
+    case MTS_PARALLEL_TYPE_DB_NAME:
+      current_mts_submode = (Mts_submode *)new Mts_submode_database();
+      break;
+    case MTS_PARALLEL_TYPE_LOGICAL_CLOCK:
+      current_mts_submode = (Mts_submode *)new Mts_submode_logical_clock();
+      break;
+    case MTS_PARALLEL_TYPE_DEPENDENCY:
+      current_mts_submode = (Mts_submode *)new Mts_submode_logical_clock(); //Mts_submode_dependency();
+      break;
+    default:
+      DBUG_RETURN(1);
+  }
 
   // workers and coordinator must be of the same type
   DBUG_ASSERT(rli->current_mts_submode->get_type() ==
@@ -1220,7 +1230,11 @@ void Slave_worker::slave_worker_ends_group(Log_event *ev, int error) {
     // first ever group must have relay log name
     DBUG_ASSERT(last_group_done_index != c_rli->gaq->size ||
                 ptr_g->group_relay_log_name != NULL);
-    DBUG_ASSERT(ptr_g->worker_id == id);
+
+    if (c_rli->channel_mts_submode == MTS_PARALLEL_TYPE_DEPENDENCY)
+      ptr_g->worker_id = id;
+    else
+      DBUG_ASSERT(ptr_g->worker_id == id);
 
     /*
       DDL that has not yet updated the slave info repository does it now.
@@ -2200,6 +2214,18 @@ Slave_job_item *de_queue(Slave_jobs_queue *jobs, Slave_job_item *ret) {
   return ret;
 }
 
+void append_item_to_group(slave_job_item *job_item, Relay_log_info *rli) {
+    mysql_mutex_lock(&rli->jobs_queue_lock);
+  if (rli->jobs_queue.empty() || rli->gaq->assigned_group_index != rli->jobs_queue_last_index) {
+    rli->jobs_queue.emplace(std::vector<Slave_job_item>());
+    rli->jobs_queue_last_index = rli->gaq->assigned_group_index;
+  }
+  DBUG_PRINT("mts", ("Assigning job %llu to group %u\n",
+                     job_item->data->common_header->log_pos, rli->jobs_queue_last_index));
+  rli->jobs_queue.back().push_back(*job_item);
+  mysql_mutex_unlock(&rli->jobs_queue_lock);
+}
+
 /**
    Coordinator enqueues a job item into a Worker private queue.
 
@@ -2219,7 +2245,8 @@ bool append_item_to_jobs(slave_job_item *job_item, Slave_worker *worker,
   ulonglong new_pend_size;
   PSI_stage_info old_stage;
 
-  DBUG_ASSERT(thd == current_thd);
+  DBUG_ASSERT(mts_parallel_option == MTS_PARALLEL_TYPE_DEPENDENCY ||
+              thd == current_thd);
 
   mysql_mutex_lock(&rli->pending_jobs_lock);
   new_pend_size = rli->mts_pending_jobs_size + ev_size;
@@ -2425,7 +2452,7 @@ static void remove_item_from_jobs(slave_job_item *job_item,
            a-pointer to an item.
 */
 static struct slave_job_item *pop_jobs_item(Slave_worker *worker,
-                                            Slave_job_item *job_item) {
+                                            Slave_job_item *job_item, Relay_log_info *rli) {
   THD *thd = worker->info_thd;
 
   mysql_mutex_lock(&worker->jobs_lock);
@@ -2438,12 +2465,38 @@ static struct slave_job_item *pop_jobs_item(Slave_worker *worker,
 
     if (set_max_updated_index_on_stop(worker, job_item)) break;
     if (job_item->data == NULL) {
-      worker->wq_empty_waits++;
-      thd->ENTER_COND(&worker->jobs_cond, &worker->jobs_lock,
-                      &stage_slave_waiting_event_from_coordinator, &old_stage);
-      mysql_cond_wait(&worker->jobs_cond, &worker->jobs_lock);
-      mysql_mutex_unlock(&worker->jobs_lock);
-      thd->EXIT_COND(&old_stage);
+      if (rli->jobs_queue.empty()) {
+        worker->wq_empty_waits++;
+        thd->ENTER_COND(&worker->jobs_cond, &worker->jobs_lock,
+                        &stage_slave_waiting_event_from_coordinator, &old_stage);
+        mysql_cond_wait(&worker->jobs_cond, &worker->jobs_lock);
+        mysql_mutex_unlock(&worker->jobs_lock);
+        thd->EXIT_COND(&old_stage);
+      } else {
+        mysql_mutex_unlock(&worker->jobs_lock);
+      }
+
+      if (rli->channel_mts_submode == MTS_PARALLEL_TYPE_DEPENDENCY) {
+        mysql_mutex_lock(&rli->jobs_queue_lock);
+        DBUG_PRINT("mts", ("At worker %lu rli->jobs_queue.empty()=%d", worker->id, rli->jobs_queue.empty()));
+        if (!rli->jobs_queue.empty()) {
+          std::vector<Slave_job_item> jobs_vector = rli->jobs_queue.front();
+          Log_event *ev;
+       //   for (auto &job_item : jobs_vector) {
+
+          for (size_t i = 0; i < jobs_vector.size(); ++i) {
+              Slave_job_item& job_item = jobs_vector[i];
+              ev = job_item.data;
+              DBUG_PRINT("mts", ("Processing job %llu at worker %lu mts_group_idx=%lu last=%d", ev->common_header->log_pos, worker->id, ev->mts_group_idx, i == jobs_vector.size()-1));
+              ev->prepare_worker(i == jobs_vector.size()-1, ev->mts_group_idx, worker, rli);
+
+              if (append_item_to_jobs(&job_item, worker, rli)) break;
+          }
+          rli->jobs_queue.pop();
+        }
+        mysql_mutex_unlock(&rli->jobs_queue_lock);
+      }
+
       mysql_mutex_lock(&worker->jobs_lock);
     }
   }
@@ -2536,9 +2589,11 @@ int slave_worker_exec_job_group(Slave_worker *worker, Relay_log_info *rli) {
 
   DBUG_ENTER("slave_worker_exec_job_group");
 
+  DBUG_PRINT("mts", ("At worker %lu", worker->id));
+
   if (unlikely(worker->trans_retries > 0)) worker->trans_retries = 0;
 
-  job_item = pop_jobs_item(worker, job_item);
+  job_item = pop_jobs_item(worker, job_item, rli);
   start_relay_number = job_item->relay_number;
   start_relay_pos = job_item->relay_pos;
 
@@ -2584,6 +2639,8 @@ int slave_worker_exec_job_group(Slave_worker *worker, Relay_log_info *rli) {
       ptr_g->new_fd_event = NULL;
     }
 
+    DBUG_PRINT("mts", ("Starting job %llu at worker %lu",
+                     job_item->data->common_header->log_pos, worker->id));
     error = worker->slave_worker_exec_event(ev);
 
     set_timespec_nsec(&worker->ts_exec[1], 0);  // pre-exec
@@ -2617,7 +2674,7 @@ int slave_worker_exec_job_group(Slave_worker *worker, Relay_log_info *rli) {
     /* The event will be used later if worker is NULL, so it is not freed */
     if (ev->worker != NULL) delete ev;
 
-    job_item = pop_jobs_item(worker, job_item);
+    job_item = pop_jobs_item(worker, job_item, rli);
   }
 
   DBUG_PRINT("info", (" commits GAQ index %lu, last committed  %lu",

@@ -38,6 +38,7 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include <queue>
 
 #include "binlog_event.h"
 #include "lex_string.h"
@@ -165,6 +166,9 @@ class Relay_log_info : public Rpl_info {
   friend class Rpl_info_factory;
 
  public:
+  std::queue<std::vector<Slave_job_item>> jobs_queue;
+  uint jobs_queue_last_index;
+  mysql_mutex_t jobs_queue_lock;
   /*
     The per-channel filter associated with this RLI
   */

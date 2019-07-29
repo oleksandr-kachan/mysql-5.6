@@ -1013,6 +1013,7 @@ class Log_event {
   }
 
  public:
+  void prepare_worker(bool ends_group, ulong gaq_index, Slave_worker *ret_worker, Relay_log_info *rli);
   /**
      The method fills in pointers to event's database name c-strings
      to a supplied array.

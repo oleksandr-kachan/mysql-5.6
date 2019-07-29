@@ -492,6 +492,7 @@ extern PSI_mutex_key key_relay_log_info_sleep_lock;
 extern PSI_mutex_key key_relay_log_info_thd_lock;
 extern PSI_mutex_key key_relay_log_info_log_space_lock;
 extern PSI_mutex_key key_relay_log_info_run_lock;
+extern PSI_mutex_key key_mutex_jobs_queue;
 extern PSI_mutex_key key_mutex_slave_parallel_pend_jobs;
 extern PSI_mutex_key key_mutex_slave_parallel_worker;
 extern PSI_mutex_key key_mutex_slave_parallel_worker_count;

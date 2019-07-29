@@ -414,7 +414,7 @@ static void generate_hash_pke(const std::string &pke, THD *thd) {
       thd->variables.transaction_write_set_extraction, pke.c_str(), pke.size());
   thd->get_transaction()->get_transaction_write_set_ctx()->add_write_set(hash);
 
-  DBUG_PRINT("info", ("pke: %s; hash: %llu", pke.c_str(), hash));
+  DBUG_PRINT("info", ("pke: %s; hash: %llu row_query='%s'", pke.c_str(), hash, thd == current_thd ? thd->row_query.c_str() : NULL));
   DBUG_VOID_RETURN;
 }
 

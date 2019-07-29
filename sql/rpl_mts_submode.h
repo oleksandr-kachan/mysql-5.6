@@ -25,6 +25,9 @@
 #include <stddef.h>
 #include <sys/types.h>
 #include <atomic>
+#include <deque>
+#include <memory>
+#include <stack>
 #include <utility>
 
 #include "binlog_event.h"  // SEQ_UNINIT
@@ -45,7 +48,9 @@ enum enum_mts_parallel_type {
   /* Parallel slave based on Database name */
   MTS_PARALLEL_TYPE_DB_NAME = 0,
   /* Parallel slave based on group information from Binlog group commit */
-  MTS_PARALLEL_TYPE_LOGICAL_CLOCK = 1
+  MTS_PARALLEL_TYPE_LOGICAL_CLOCK = 1,
+  /* Parallel slave based on dependencies between RBR events */
+  MTS_PARALLEL_TYPE_DEPENDENCY = 2,
 };
 
 // Extend the following class as per requirement for each sub mode

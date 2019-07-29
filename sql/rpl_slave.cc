@@ -101,7 +101,7 @@
 #include "sql/binlog.h"
 #include "sql/binlog_reader.h"
 #include "sql/current_thd.h"
-#include "sql/debug_sync.h"   // DEBUG_SYNC
+#include "sql/debug_sync.h"  // DEBUG_SYNC
 #include "sql/derror.h"       // ER_THD
 #include "sql/dynamic_ids.h"  // Server_ids
 #include "sql/handler.h"
@@ -529,8 +529,10 @@ int init_slave() {
         mi->rli->checkpoint_group = opt_mts_checkpoint_group;
         if (mts_parallel_option == MTS_PARALLEL_TYPE_DB_NAME)
           mi->rli->channel_mts_submode = MTS_PARALLEL_TYPE_DB_NAME;
-        else
+        else if (mts_parallel_option == MTS_PARALLEL_TYPE_LOGICAL_CLOCK)
           mi->rli->channel_mts_submode = MTS_PARALLEL_TYPE_LOGICAL_CLOCK;
+        else
+          mi->rli->channel_mts_submode = MTS_PARALLEL_TYPE_DEPENDENCY;
         if (start_slave_threads(true /*need_lock_slave=true*/,
                                 false /*wait_for_start=false*/, mi,
                                 thread_mask)) {
@@ -1138,9 +1140,12 @@ static inline int fill_mts_gaps_and_recover(Master_info *mi) {
   rli->set_until_option(until_mg);
   rli->until_condition = Relay_log_info::UNTIL_SQL_AFTER_MTS_GAPS;
   until_mg->init();
-  rli->channel_mts_submode = (mts_parallel_option == MTS_PARALLEL_TYPE_DB_NAME)
-                                 ? MTS_PARALLEL_TYPE_DB_NAME
-                                 : MTS_PARALLEL_TYPE_LOGICAL_CLOCK;
+  if (mts_parallel_option == MTS_PARALLEL_TYPE_DB_NAME)
+    mi->rli->channel_mts_submode = MTS_PARALLEL_TYPE_DB_NAME;
+  else if (mts_parallel_option == MTS_PARALLEL_TYPE_LOGICAL_CLOCK)
+    mi->rli->channel_mts_submode = MTS_PARALLEL_TYPE_LOGICAL_CLOCK;
+  else
+    mi->rli->channel_mts_submode = MTS_PARALLEL_TYPE_DEPENDENCY;
   LogErr(INFORMATION_LEVEL, ER_RPL_MTS_RECOVERY_STARTING_COORDINATOR);
   recovery_error = start_slave_thread(
 #ifdef HAVE_PSI_THREAD_INTERFACE
@@ -4311,6 +4316,8 @@ apply_event_and_update_pos(Log_event **ptr_ev, THD *thd, Relay_log_info *rli) {
       DBUG_RETURN(SLAVE_APPLY_EVENT_AND_UPDATE_POS_OK);
 
     exec_res = ev->apply_event(rli);
+    DBUG_PRINT("mts", ("AFTER apply_event exec_res=%d ev->worker=%p assigned_group_index=%lu id=%ld", exec_res, ev->worker, rli->gaq->assigned_group_index,
+      ((ev->worker && ev->worker != rli) ? ((Slave_worker *)ev->worker)->id : -1)));
 
     DBUG_EXECUTE_IF("simulate_stop_when_mts_in_group",
                     if (rli->mts_group_status == Relay_log_info::MTS_IN_GROUP &&
@@ -4358,8 +4365,13 @@ apply_event_and_update_pos(Log_event **ptr_ev, THD *thd, Relay_log_info *rli) {
                                (da_item.data)->common_header->log_pos, w->id));
             da_item.data->mts_group_idx =
                 rli->gaq->assigned_group_index;  // similarly to above
-            if (!append_item_to_jobs_error)
-              append_item_to_jobs_error = append_item_to_jobs(&da_item, w, rli);
+            if (!append_item_to_jobs_error) {
+              if (rli->channel_mts_submode == MTS_PARALLEL_TYPE_DEPENDENCY) {
+                append_item_to_group(&da_item, rli);
+              } else {
+                append_item_to_jobs_error = append_item_to_jobs(&da_item, w, rli);
+              }
+            }
             if (append_item_to_jobs_error) delete da_item.data;
           }
           rli->curr_group_da.clear();
@@ -4367,12 +4379,23 @@ apply_event_and_update_pos(Log_event **ptr_ev, THD *thd, Relay_log_info *rli) {
         if (append_item_to_jobs_error)
           DBUG_RETURN(SLAVE_APPLY_EVENT_AND_UPDATE_POS_APPEND_JOB_ERROR);
 
-        DBUG_PRINT("mts", ("Assigning job %llu to worker %lu\n",
-                           job_item->data->common_header->log_pos, w->id));
+        if (rli->channel_mts_submode == MTS_PARALLEL_TYPE_DEPENDENCY) {
+          append_item_to_group(job_item, rli);
 
-        /* Notice `ev' instance can be destoyed after `append()' */
-        if (append_item_to_jobs(job_item, w, rli))
-          DBUG_RETURN(SLAVE_APPLY_EVENT_AND_UPDATE_POS_APPEND_JOB_ERROR);
+          if (rli->mts_group_status == Relay_log_info::MTS_END_GROUP)
+          for (auto worker : rli->workers) {
+              mysql_mutex_lock(&worker->jobs_lock);
+              mysql_cond_signal(&worker->jobs_cond);
+              mysql_mutex_unlock(&worker->jobs_lock);
+          }
+        } else {
+          DBUG_PRINT("mts", ("Assigning job %llu to worker %lu\n",
+                             job_item->data->common_header->log_pos, w->id));
+
+          /* Notice `ev' instance can be destoyed after `append()' */
+          if (append_item_to_jobs(job_item, w, rli))
+            DBUG_RETURN(SLAVE_APPLY_EVENT_AND_UPDATE_POS_APPEND_JOB_ERROR);
+        }
         if (need_sync) {
           /*
             combination of over-max db:s and end of the current group
@@ -6624,10 +6647,12 @@ extern "C" void *handle_slave_sql(void *arg) {
   thd_set_psi(rli->info_thd, psi);
 #endif
 
-  if (rli->channel_mts_submode != MTS_PARALLEL_TYPE_DB_NAME)
+  if (rli->channel_mts_submode == MTS_PARALLEL_TYPE_LOGICAL_CLOCK)
     rli->current_mts_submode = new Mts_submode_logical_clock();
-  else
+  else if (rli->channel_mts_submode == MTS_PARALLEL_TYPE_DB_NAME)
     rli->current_mts_submode = new Mts_submode_database();
+  else if (rli->channel_mts_submode == MTS_PARALLEL_TYPE_DEPENDENCY)
+    rli->current_mts_submode = new Mts_submode_logical_clock(); //Mts_submode_dependency();
 
   if (opt_slave_preserve_commit_order && rli->opt_slave_parallel_workers > 0 &&
       opt_bin_log && opt_log_slave_updates)
@@ -8382,8 +8407,10 @@ bool start_slave(THD *thd, LEX_SLAVE_CONNECTION *connection_param,
           mi->rli->opt_slave_parallel_workers = opt_mts_slave_parallel_workers;
           if (mts_parallel_option == MTS_PARALLEL_TYPE_DB_NAME)
             mi->rli->channel_mts_submode = MTS_PARALLEL_TYPE_DB_NAME;
-          else
+          else if (mts_parallel_option == MTS_PARALLEL_TYPE_LOGICAL_CLOCK)
             mi->rli->channel_mts_submode = MTS_PARALLEL_TYPE_LOGICAL_CLOCK;
+          else
+            mi->rli->channel_mts_submode = MTS_PARALLEL_TYPE_DEPENDENCY;
 
 #ifndef DBUG_OFF
           if (!DBUG_EVALUATE_IF("check_slave_debug_group", 1, 0))

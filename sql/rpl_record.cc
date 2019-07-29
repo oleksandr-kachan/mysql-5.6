@@ -428,6 +428,9 @@ static void insert_row_fields(std::string &row_query, TABLE *table) {
 #endif
   }
   if (row_query.back() == ',') row_query.back() = ')';
+
+  DBUG_PRINT("info",
+             ("row_query=%s", row_query.c_str()));
 }
 
 /**

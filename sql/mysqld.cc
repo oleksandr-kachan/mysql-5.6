@@ -10657,6 +10657,7 @@ PSI_mutex_key key_relay_log_info_sleep_lock;
 PSI_mutex_key key_relay_log_info_thd_lock;
 PSI_mutex_key key_relay_log_info_log_space_lock;
 PSI_mutex_key key_relay_log_info_run_lock;
+PSI_mutex_key key_mutex_jobs_queue;
 PSI_mutex_key key_mutex_slave_parallel_pend_jobs;
 PSI_mutex_key key_mutex_slave_parallel_worker_count;
 PSI_mutex_key key_mutex_slave_parallel_worker;
@@ -10747,6 +10748,7 @@ static PSI_mutex_info all_server_mutexes[]=
   { &key_relay_log_info_thd_lock, "Relay_log_info::info_thd_lock", 0, 0, PSI_DOCUMENT_ME},
   { &key_relay_log_info_log_space_lock, "Relay_log_info::log_space_lock", 0, 0, PSI_DOCUMENT_ME},
   { &key_relay_log_info_run_lock, "Relay_log_info::run_lock", 0, 0, PSI_DOCUMENT_ME},
+  { &key_mutex_jobs_queue, "Relay_log_info::jobs_queue_lock", 0, 0, PSI_DOCUMENT_ME},
   { &key_mutex_slave_parallel_pend_jobs, "Relay_log_info::pending_jobs_lock", 0, 0, PSI_DOCUMENT_ME},
   { &key_mutex_slave_parallel_worker_count, "Relay_log_info::exit_count_lock", 0, 0, PSI_DOCUMENT_ME},
   { &key_mutex_slave_parallel_worker, "Worker_info::jobs_lock", 0, 0, PSI_DOCUMENT_ME},
