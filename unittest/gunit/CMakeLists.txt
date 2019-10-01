@@ -257,7 +257,7 @@ SET(TESTS
   filesort_buffer
   filesort_compare
   like_range
-  mdl
+#  mdl
   my_bitmap
   my_error
   my_fileutils
