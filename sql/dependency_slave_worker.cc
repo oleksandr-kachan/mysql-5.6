@@ -73,7 +73,6 @@ bool Dependency_slave_worker::execute_group()
   int err= 0;
   Commit_order_manager *commit_order_mngr= get_commit_order_manager();
 
-  DBUG_ASSERT(current_event_index == 0);
   auto begin_event= get_begin_event(commit_order_mngr);
   auto ev= begin_event;
 
@@ -83,12 +82,6 @@ bool Dependency_slave_worker::execute_group()
     {
       c_rli->dependency_worker_error= true;
       break;
-    }
-    // case: restart trx if temporary error, see @slave_worker_ends_group
-    if (unlikely(trans_retries && current_event_index == 0))
-    {
-      ev= begin_event;
-      continue;
     }
     finalize_event(ev);
     ev= ev->next();
@@ -137,19 +130,9 @@ Dependency_slave_worker::execute_event(std::shared_ptr<Log_event_wrapper> &ev)
   if (unlikely(c_rli->dependency_worker_error))
     return 1;
 
-  // case: the worker job queue is full, let's flush the queue to make progress
-  if (unlikely(current_event_index >= jobs.size))
-  {
-    // Resets current_event_index to 0 and disables trx retires because we've
-    // flushed the events
-    mysql_mutex_lock(&jobs_lock);
-    clear_current_group_events(this, c_rli, true);
-    mysql_mutex_unlock(&jobs_lock);
-  }
-
   // case: append to jobs queue only if this is not a trx retry, trx retries
   // resets @current_event_index, see @slave_worker_ends_group
-  if (likely(current_event_index == jobs.len))
+//  if (likely(current_event_index == jobs.len))
   {
     // NOTE: this is done so that @pop_jobs_item() can extract this event
     // although this is redundant it makes integration with existing code much

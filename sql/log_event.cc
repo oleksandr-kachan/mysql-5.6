@@ -12674,12 +12674,6 @@ AFTER_MAIN_EXEC_ROW_LOOP:
       clear_all_errors(thd, const_cast<Relay_log_info*>(rli));
       error= 0;
     }
-    /*
-      Restore m_curr_row. This is necessary when slave threads are retrying
-      execution of row event after hitting a transient error such as
-      lock wait timeout.
-    */
-    m_curr_row = saved_m_curr_row;
 
     // Idempotent recovery is enabled so we log this event
     // NOTE: error will be set to 0 in handle_idempotent_and_ignored_errors()
@@ -15070,11 +15064,7 @@ int Rows_query_log_event::do_apply_event(Relay_log_info const *rli)
 
   DBUG_ASSERT(rli->rows_query_ev == NULL);
 
-  // slave worker threads will delete Rows_query_log_event after the
-  // end of the transaction. No need to store this event pointer
-  // in rows_query_ev and delete it after execution of row event.
-  if (!is_mts_worker(thd))
-    const_cast<Relay_log_info*>(rli)->rows_query_ev= this;
+  const_cast<Relay_log_info*>(rli)->rows_query_ev= this;
 
   DBUG_RETURN(0);
 }

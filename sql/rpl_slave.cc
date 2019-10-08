@@ -5452,8 +5452,6 @@ int check_temp_dir(char* tmp_file)
 
 static std::pair<ulong, ulonglong> cleanup_worker_jobs(Slave_worker *w)
 {
-  ulong                   ii= 0;
-  ulong                   current_event_index;
   ulong                   purge_cnt= 0;
   ulonglong               purge_size= 0;
   struct slave_job_item   job_item;
@@ -5463,20 +5461,14 @@ static std::pair<ulong, ulonglong> cleanup_worker_jobs(Slave_worker *w)
 
   log_event_free_list.reserve(w->jobs.avail);
 
-  current_event_index = std::max(w->last_current_event_index,
-                                 w->current_event_index);
   while (de_queue(&w->jobs, &job_item))
   {
     DBUG_ASSERT(job_item.data);
 
     Log_event* log_event= static_cast<Log_event*>(job_item.data);
 
-    ii++;
-    if (ii > current_event_index)
-    {
-      purge_size += log_event->data_written;
-      purge_cnt++;
-    }
+    purge_size += log_event->data_written;
+    purge_cnt++;
 
     // Save the freeing for outside the mutex
     log_event_free_list.push_back(log_event);
@@ -6385,6 +6377,7 @@ void slave_stop_workers(Relay_log_info *rli, bool *mts_inited)
       get_dynamic((DYNAMIC_ARRAY*)&rli->workers, (uchar*) &w, i);
       mysql_mutex_lock(&w->jobs_lock);
 
+
       // wait for workers to stop running
       while (w->running_status != Slave_worker::NOT_RUNNING)
       {
@@ -6413,7 +6406,7 @@ void slave_stop_workers(Relay_log_info *rli, bool *mts_inited)
       }
 
       w->running_status= Slave_worker::STOP;
-      (void) set_max_updated_index_on_stop(w, job_item, w->current_event_index);
+      (void) set_max_updated_index_on_stop(w, job_item);
       mysql_cond_signal(&w->jobs_cond);
 
       mysql_mutex_unlock(&w->jobs_lock);
@@ -9184,6 +9177,17 @@ int start_slave(THD* thd , Master_info* mi,  bool net_report)
         }
 
         mysql_mutex_unlock(&mi->rli->data_lock);
+
+        /* MTS technical limitation no support of trans retry */
+        if (mi->rli->opt_slave_parallel_workers != 0 && slave_trans_retries != 0)
+        {
+          push_warning_printf(thd, Sql_condition::WARN_LEVEL_NOTE,
+                              ER_MTS_FEATURE_IS_NOT_SUPPORTED,
+                              ER(ER_MTS_FEATURE_IS_NOT_SUPPORTED),
+                              "slave_transaction_retries",
+                              "In the event of a transient failure, the slave will "
+                              "not retry the transaction and will stop.");
+        }
       }
       else if (thd->lex->mi.pos || thd->lex->mi.relay_log_pos || thd->lex->mi.gtid)
         push_warning(thd, Sql_condition::WARN_LEVEL_NOTE, ER_UNTIL_COND_IGNORED,
