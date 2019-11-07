@@ -223,6 +223,7 @@ Slave_worker::Slave_worker(Relay_log_info *rli
   checkpoint_master_log_name[0]= 0;
   my_init_dynamic_array(&curr_group_exec_parts, sizeof(db_worker_hash_entry*),
                         SLAVE_INIT_DBS_IN_GROUP, 1);
+//  trans_retries = 0;
   my_init_dynamic_array(&worker_gtid_infos, sizeof(Gtid_info *), 1, 1);
   mysql_mutex_init(key_mutex_slave_parallel_worker, &jobs_lock,
                    MY_MUTEX_INIT_FAST);
@@ -289,6 +290,11 @@ int Slave_worker::init_worker(Relay_log_info * rli, ulong i)
   jobs.overfill= FALSE;    //  todo: move into Slave_jobs_queue constructor
   jobs.waited_overfill= 0;
   jobs.entry= jobs.size= c_rli->mts_slave_worker_queue_len_max;
+  DBUG_EXECUTE_IF("slave_worker_queue_size",
+                  {
+                    jobs.entry = jobs.size = 5;
+                  }
+                 );
   jobs.inited_queue= true;
   curr_group_seen_begin= curr_group_seen_gtid= false;
 
@@ -1360,6 +1366,7 @@ Slave_worker *get_least_occupied_worker(DYNAMIC_ARRAY *ws)
 
    @param ev     a pointer to Log_event
    @param error  error code after processing the event by caller.
+
 */
 void Slave_worker::slave_worker_ends_group(Log_event* ev, int error)
 {
@@ -2003,7 +2010,8 @@ static int en_queue(Slave_jobs_queue *jobs, Slave_job_item *item)
 }
 
 /**
-   return the value of @c data member of the head of the queue.
+   return the value of @c data member of the element at location index
+                          starting from the head of the queue.
 */
 void * head_queue(Slave_jobs_queue *jobs, Slave_job_item *ret)
 {
@@ -2013,6 +2021,7 @@ void * head_queue(Slave_jobs_queue *jobs, Slave_job_item *ret)
     ret->data= NULL;               // todo: move to caller
     return NULL;
   }
+
   get_dynamic(&jobs->Q, (uchar*) ret, jobs->entry);
 
   DBUG_ASSERT(ret->data);         // todo: move to caller
@@ -2463,6 +2472,7 @@ int slave_worker_exec_job(Slave_worker *worker, Relay_log_info *rli)
                 ev->mts_group_idx, worker->last_group_done_index));
     worker->slave_worker_ends_group(ev, error); /* last done sets post exec */
 
+
 #ifndef DBUG_OFF
     DBUG_PRINT("mts", ("Check_slave_debug_group worker %lu mts_checkpoint_group"
                " %u processed %lu debug %d\n", worker->id, opt_mts_checkpoint_group,
@@ -2598,7 +2608,6 @@ int slave_worker_exec_job(Slave_worker *worker, Relay_log_info *rli)
     rli->mts_wq_oversize= FALSE;
     mysql_cond_signal(&rli->pending_jobs_cond);
   }
-
   mysql_mutex_unlock(&rli->pending_jobs_lock);
 
   worker->events_done++;
@@ -2615,11 +2624,8 @@ err:
   }
 
   // todo: simulate delay in delete
-  if (ev && ev->worker && ev->get_type_code() != ROWS_QUERY_LOG_EVENT)
-  {
-    delete ev;
-  }
-
+//  if (ev && ev->worker && ev->get_type_code() != ROWS_QUERY_LOG_EVENT)
+//    delete ev;
 
   DBUG_RETURN(error);
 }

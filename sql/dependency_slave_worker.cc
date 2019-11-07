@@ -8,9 +8,7 @@
 bool append_item_to_jobs(slave_job_item *job_item,
                          Slave_worker *w,
                          Relay_log_info *rli);
-void clear_current_group_events(Slave_worker *worker,
-                                Relay_log_info *rli,
-                                bool overfill);
+
 
 std::shared_ptr<Log_event_wrapper>
 Dependency_slave_worker::get_begin_event(Commit_order_manager *co_mngr)
@@ -130,9 +128,6 @@ Dependency_slave_worker::execute_event(std::shared_ptr<Log_event_wrapper> &ev)
   if (unlikely(c_rli->dependency_worker_error))
     return 1;
 
-  // case: append to jobs queue only if this is not a trx retry, trx retries
-  // resets @current_event_index, see @slave_worker_ends_group
-//  if (likely(current_event_index == jobs.len))
   {
     // NOTE: this is done so that @pop_jobs_item() can extract this event
     // although this is redundant it makes integration with existing code much
