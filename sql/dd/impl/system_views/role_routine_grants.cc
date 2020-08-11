@@ -57,8 +57,8 @@ Role_routine_grants::Role_routine_grants() {
   m_target_def.add_from("mysql.procs_priv pp");
   m_target_def.add_from(
       " JOIN role_graph rg ON "
-      " pp.User = rg.c_from_user AND "
-      "  CONVERT(pp.Host using utf8mb4) = rg.c_from_host");
+      " pp.User = CONVERT(rg.c_from_user using utf8mb4) COLLATE utf8mb4_0900_ai_ci AND "
+      "  CONVERT(pp.Host using utf8mb4) COLLATE utf8mb4_0900_ai_ci = rg.c_from_host");
 
   m_target_def.add_where("pp.Proc_priv > 0");
   m_target_def.add_where(" AND c_to_user != ''");

@@ -57,12 +57,12 @@ Role_column_grants::Role_column_grants() {
   m_target_def.add_from("mysql.tables_priv tp ");
   m_target_def.add_from(
       " JOIN role_graph rg ON "
-      " tp.User = rg.c_from_user AND "
-      "  CONVERT(tp.Host using utf8mb4) = rg.c_from_host");
+      " tp.User = CONVERT(rg.c_from_user using utf8mb4) COLLATE utf8mb4_0900_ai_ci AND "
+      "  CONVERT(tp.Host using utf8mb4) COLLATE utf8mb4_0900_ai_ci = rg.c_from_host");
 
   m_target_def.add_from(
       " JOIN mysql.columns_priv cp ON "
-      "CONVERT(tp.Host using utf8mb4) = cp.Host AND cp.Db=tp.Db AND "
+      "CONVERT(tp.Host using utf8mb4) COLLATE utf8mb4_0900_ai_ci = cp.Host AND cp.Db=tp.Db AND "
       "cp.User=tp.User AND cp.Table_name=tp.Table_name");
 
   m_target_def.add_where("cp.Column_priv > 0");

@@ -2205,6 +2205,7 @@ bool DTCollation::aggregate(DTCollation &dt, uint flags) {
 /******************************/
 static void my_coll_agg_error(DTCollation &c1, DTCollation &c2,
                               const char *fname) {
+  fprintf(stderr, "ER_CANT_AGGREGATE_2COLLATIONS\n");
   my_error(ER_CANT_AGGREGATE_2COLLATIONS, MYF(0), c1.collation->name,
            c1.derivation_name(), c2.collation->name, c2.derivation_name(),
            fname);
@@ -2235,7 +2236,9 @@ static bool agg_item_collations(DTCollation &c, const char *fname, Item **av,
   bool unknown_cs = false;
 
   c.set(av[0]->collation);
+  fprintf(stderr, "item_name[0]=%s\n", av[0]->item_name.ptr());
   for (i = 1, arg = &av[item_sep]; i < count; i++, arg++) {
+    fprintf(stderr, "item_name[%d]=%s\n", i, av[i]->item_name.ptr());
     if (c.aggregate((*arg)->collation, flags)) {
       if (c.derivation == DERIVATION_NONE && c.collation == &my_charset_bin) {
         unknown_cs = true;

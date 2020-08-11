@@ -75,22 +75,22 @@ const String_type &Applicable_roles::cte_expression() {
       "        ROLE_NAME, ROLE_HOST, "
       "        INTERNAL_GET_USERNAME(), INTERNAL_GET_HOSTNAME(), "
       "        CAST(SHA2(CONCAT(QUOTE(ROLE_NAME),'@', "
-      "                  CONVERT(QUOTE(ROLE_HOST) using utf8mb4)), 256) "
+      "                  CONVERT(QUOTE(ROLE_HOST) using utf8mb4) COLLATE utf8mb4_0900_ai_ci), 256) "
       "             AS CHAR(17000) CHARSET utf8mb4), "
       "        CAST('N' as CHAR(1) CHARSET utf8mb4), "
       "        FALSE "
       "      FROM JSON_TABLE(INTERNAL_GET_MANDATORY_ROLES_JSON(),"
       "            '$[*]' COLUMNS ("
-      "            ROLE_NAME VARCHAR(255) CHARSET utf8mb4 PATH '$.ROLE_NAME', "
-      "            ROLE_HOST VARCHAR(255) CHARSET utf8mb4 PATH '$.ROLE_HOST') "
+      "            ROLE_NAME VARCHAR(255) CHARSET utf8mb4 COLLATE utf8mb4_0900_ai_ci PATH '$.ROLE_NAME', "
+      "            ROLE_HOST VARCHAR(255) CHARSET utf8mb4 COLLATE utf8mb4_0900_ai_ci PATH '$.ROLE_HOST') "
       "            ) mandatory_roles "
       "      WHERE CONCAT(QUOTE(ROLE_NAME),'@', "
-      "                   CONVERT(QUOTE(ROLE_HOST) using utf8mb4)) NOT IN "
+      "                   CONVERT(QUOTE(ROLE_HOST) using utf8mb4) COLLATE utf8mb4_0900_ai_ci) NOT IN "
       "            (SELECT CONCAT(QUOTE(FROM_USER),'@', "
-      "                       CONVERT(QUOTE(FROM_HOST) using utf8mb4)) "
+      "                       CONVERT(QUOTE(FROM_HOST) using utf8mb4) COLLATE utf8mb4_0900_ai_ci) "
       "             FROM mysql.role_edges "
       "             WHERE TO_USER = INTERNAL_GET_USERNAME() AND "
-      "             CONVERT(TO_HOST using utf8mb4) = INTERNAL_GET_HOSTNAME())"
+      "             CONVERT(TO_HOST using utf8mb4) COLLATE utf8mb4_0900_ai_ci = INTERNAL_GET_HOSTNAME())"
       "   ) "
 
       // Recursive CTE SELECT query
@@ -100,20 +100,20 @@ const String_type &Applicable_roles::cte_expression() {
       /*
         Pass NULL for role_path to stop recursive CTE execution, once
         we locate a role that is already in the currently visited
-        role_path.
+        rol _path.
       */
       "      IF(LOCATE(SHA2(CONCAT(QUOTE(FROM_USER),'@', "
-      "                     CONVERT(QUOTE(FROM_HOST) using utf8mb4)), 256), "
+      "                     CONVERT(QUOTE(FROM_HOST) using utf8mb4) COLLATE utf8mb4_0900_ai_ci), 256), "
       "                role_path) = 0, "
       "         CONCAT(role_path,'->', SHA2(CONCAT(QUOTE(FROM_USER),'@',"
-      "           CONVERT(QUOTE(FROM_HOST) using utf8mb4)), 256)), NULL), "
+      "           CONVERT(QUOTE(FROM_HOST) using utf8mb4) COLLATE utf8mb4_0900_ai_ci), 256)), NULL), "
       "      WITH_ADMIN_OPTION, "
       "      IF(c_enabled OR "
       "       INTERNAL_IS_ENABLED_ROLE(FROM_USER, FROM_HOST), TRUE, FALSE) "
       "    FROM mysql.role_edges, role_graph "
 
-      "    WHERE TO_USER = c_from_user AND "
-      "          CONVERT(TO_HOST using utf8mb4)= c_from_host AND "
+      "    WHERE CONVERT(TO_USER using utf8mb4) COLLATE utf8mb4_0900_ai_ci = c_from_user AND "
+      "          CONVERT(TO_HOST using utf8mb4) COLLATE utf8mb4_0900_ai_ci = c_from_host AND "
       "          role_path IS NOT NULL)");
   return s_cte_expression;
 }
@@ -142,10 +142,10 @@ Applicable_roles::Applicable_roles() {
       FIELD_IS_DEFAULT, "IS_DEFAULT",
       " (SELECT IF(COUNT(*), 'YES', 'NO') "
       "   FROM mysql.default_roles "
-      "   WHERE DEFAULT_ROLE_USER = c_from_user AND "
-      "         CONVERT(DEFAULT_ROLE_HOST using utf8mb4)= c_from_host AND "
+      "   WHERE CONVERT(DEFAULT_ROLE_USER using utf8mb4) COLLATE utf8mb4_0900_ai_ci = CONVERT(c_from_user using utf8mb4) COLLATE utf8mb4_0900_ai_ci AND "
+      "         CONVERT(DEFAULT_ROLE_HOST using utf8mb4) COLLATE utf8mb4_0900_ai_ci = CONVERT(c_from_host using utf8mb4) COLLATE utf8mb4_0900_ai_ci AND "
       "         USER = c_parent_user AND "
-      "         CONVERT(HOST using utf8mb4) = c_parent_host) ");
+      "         CONVERT(HOST using utf8mb4) COLLATE utf8mb4_0900_ai_ci = c_parent_host) ");
   m_target_def.add_field(
       FIELD_IS_MANDATORY, "IS_MANDATORY",
       "IF(INTERNAL_IS_MANDATORY_ROLE(c_from_user, c_from_host), 'YES', 'NO') ");

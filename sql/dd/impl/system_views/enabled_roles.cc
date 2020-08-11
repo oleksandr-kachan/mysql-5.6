@@ -39,10 +39,10 @@ Enabled_roles::Enabled_roles() {
       FIELD_IS_DEFAULT, "IS_DEFAULT",
       " (SELECT IF(COUNT(*), 'YES', 'NO') "
       "   FROM mysql.default_roles "
-      "   WHERE DEFAULT_ROLE_USER = ROLE_NAME AND "
-      "         CONVERT(DEFAULT_ROLE_HOST using utf8mb4) = ROLE_HOST AND "
+      "   WHERE DEFAULT_ROLE_USER = CONVERT(ROLE_NAME using utf8mb4) COLLATE utf8mb4_0900_ai_ci AND "
+      "         CONVERT(DEFAULT_ROLE_HOST using utf8mb4) COLLATE utf8mb4_0900_ai_ci = ROLE_HOST AND "
       "         USER = INTERNAL_GET_USERNAME() AND "
-      "         CONVERT(HOST using utf8mb4) = INTERNAL_GET_HOSTNAME()) ");
+      "         CONVERT(HOST using utf8mb4) COLLATE utf8mb4_0900_ai_ci = INTERNAL_GET_HOSTNAME()) ");
   m_target_def.add_field(
       FIELD_IS_MANDATORY, "IS_MANDATORY",
       "IF(INTERNAL_IS_MANDATORY_ROLE(ROLE_NAME, ROLE_HOST), 'YES', 'NO') ");
@@ -50,8 +50,8 @@ Enabled_roles::Enabled_roles() {
   m_target_def.add_from(
       "JSON_TABLE(INTERNAL_GET_ENABLED_ROLE_JSON(),"
       " '$[*]' COLUMNS ("
-      " ROLE_NAME VARCHAR(255) CHARSET utf8mb4 PATH '$.ROLE_NAME', "
-      " ROLE_HOST VARCHAR(255) CHARSET utf8mb4 PATH '$.ROLE_HOST') "
+      " ROLE_NAME VARCHAR(255) CHARSET utf8mb4 COLLATE utf8mb4_0900_ai_ci PATH '$.ROLE_NAME', "
+      " ROLE_HOST VARCHAR(255) CHARSET utf8mb4 COLLATE utf8mb4_0900_ai_ci PATH '$.ROLE_HOST') "
       " ) current_user_enabled_roles");
 }
 

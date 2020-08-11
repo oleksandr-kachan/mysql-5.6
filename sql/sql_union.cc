@@ -489,7 +489,12 @@ bool SELECT_LEX_UNIT::prepare(THD *thd, Query_result *sel_result,
       derived_table->common_table_expr()->substitute_recursive_reference(thd,
                                                                          sl);
 
-    if (sl->prepare(thd)) goto err;
+    if (sl->prepare(thd)) { 
+      String str;
+      sl->print_select(thd, &str, enum_query_type(QT_TO_SYSTEM_CHARSET | QT_NO_DATA_EXPANSION | QT_SUBSELECT_AS_ONLY_SELECT_NUMBER));
+      fprintf(stderr, "SELECT_LEX_UNIT::prepare query='%s'\n", str.c_ptr_safe());
+      goto err;
+    }
 
     /*
       Use items list of underlaid select for derived tables to preserve
