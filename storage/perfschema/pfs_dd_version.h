@@ -249,18 +249,22 @@
   - add write_throttling_rules
   - add write_throttling_log
 
-  80020-012:
+  80023-012:
 
   - add sql_findings
 
-  80020-013:
+  80023-013:
 
   - add THREAD_PRIORITY column to threads table
 
+  80023-014:
+
+ - add skipped count to statement statistics
+
   The last three digits reprents Facebook specific MySQL Schema changes.
-  Version published is now 80023-013. i.e. 8.0.23 Facebook schema change no. 13.
+  Version published is now 80023-014. i.e. 8.0.23 Facebook schema change no. 14.
 */
 
-static const uint PFS_DD_VERSION = 80023013;
+static const uint PFS_DD_VERSION = 80023014;
 
 #endif /* PFS_DD_VERSION_H */
