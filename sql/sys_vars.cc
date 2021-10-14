@@ -8691,3 +8691,7 @@ static Sys_var_enum Sys_sql_duplicate_executions_control(
     GLOBAL_VAR(sql_duplicate_executions_control), CMD_LINE(OPT_ARG),
     control_level_values, DEFAULT(CONTROL_LEVEL_OFF), NO_MUTEX_GUARD,
     NOT_IN_BINLOG, ON_CHECK(NULL), ON_UPDATE(NULL));
+
+#ifndef DBUG_OFF
+Debug_shutdown_actions Debug_shutdown_actions::instance;
+#endif
